@@ -101,15 +101,18 @@ public class Producer {
         }, 10000, 10000);
 
         final DefaultMQProducer producer = new DefaultMQProducer("benchmark_producer");
+        //设置生产者的实例名，用于在集群中进行标识
         producer.setInstanceName(Long.toString(System.currentTimeMillis()));
 
         if (commandLine.hasOption('n')) {
             String ns = commandLine.getOptionValue('n');
+            //设置生产者的命名空间，用于隔离各个集群
             producer.setNamesrvAddr(ns);
         }
 
         producer.setCompressMsgBodyOverHowmuch(Integer.MAX_VALUE);
 
+        //启动生产者
         producer.start();
 
         for (int i = 0; i < threadCount; i++) {
@@ -127,6 +130,7 @@ public class Producer {
                             }
                             final long beginTimestamp = System.currentTimeMillis();
                             if (keyEnable) {
+                                //设置特征，后续可以使用该key进行查询
                                 msg.setKeys(String.valueOf(beginTimestamp / 1000));
                             }
                             if (propertySize > 0) {
@@ -149,6 +153,7 @@ public class Producer {
                                     startValue += 2;
                                 }
                             }
+                            //发送消息
                             producer.send(msg);
                             statsBenchmark.getSendRequestSuccessCount().incrementAndGet();
                             statsBenchmark.getReceiveResponseSuccessCount().incrementAndGet();
@@ -215,6 +220,7 @@ public class Producer {
 
     private static Message buildMessage(final int messageSize, final String topic) throws UnsupportedEncodingException {
         Message msg = new Message();
+        //设置消息的topic
         msg.setTopic(topic);
 
         StringBuilder sb = new StringBuilder();
@@ -222,6 +228,7 @@ public class Producer {
             sb.append("hello baby");
         }
 
+        //设置消息的body
         msg.setBody(sb.toString().getBytes(RemotingHelper.DEFAULT_CHARSET));
 
         return msg;

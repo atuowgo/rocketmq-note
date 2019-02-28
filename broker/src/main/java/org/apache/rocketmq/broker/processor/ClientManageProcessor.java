@@ -73,6 +73,7 @@ public class ClientManageProcessor implements NettyRequestProcessor {
 
     /**
      * 客户端实例上报心跳
+     * 更新producer生产的group信息，consumer消费的group,订阅内容(topic,topic类型)
      * 注册客户端包含的所有Consumer和Producer
      */
     public RemotingCommand heartBeat(ChannelHandlerContext ctx, RemotingCommand request) {

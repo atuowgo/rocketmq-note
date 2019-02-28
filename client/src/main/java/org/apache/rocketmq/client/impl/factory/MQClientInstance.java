@@ -89,7 +89,7 @@ public class MQClientInstance {
     private final int instanceIndex;
     private final String clientId;
     private final long bootTimestamp = System.currentTimeMillis();
-    //处理group对应的实例,一个group对应一个客户端实例
+    //处理group对应的实例,一个group对应一个客户端实例,后续会通过定时器上报
     private final ConcurrentMap<String/* group */, MQProducerInner> producerTable = new ConcurrentHashMap<String, MQProducerInner>();
     private final ConcurrentMap<String/* group */, MQConsumerInner> consumerTable = new ConcurrentHashMap<String, MQConsumerInner>();
     private final ConcurrentMap<String/* group */, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<String, MQAdminExtInner>();
@@ -190,11 +190,14 @@ public class MQClientInstance {
                     if (null == brokerData) {
                         continue;
                     }
+                    //以上获取topic包含q的broker配置
 
+                    //如果该topic没有分布在master节点上则不更新
                     if (!brokerData.getBrokerAddrs().containsKey(MixAll.MASTER_ID)) {
                         continue;
                     }
 
+                    //根据q配置的写入数量，分配相应数量的MessageQueue对象
                     for (int i = 0; i < qd.getWriteQueueNums(); i++) {//根据可写的queue数量，建立MessageQueue对象，qid从0下标开始
                         MessageQueue mq = new MessageQueue(topic, qd.getBrokerName(), i);
                         info.getMessageQueueList().add(mq);
@@ -225,6 +228,7 @@ public class MQClientInstance {
     }
 
     /**
+     * instance的标识为ip@pid，producer和consumer会共用同一个instance
      * 在启动时
      * 1.若没有指定nameserver地址，则同步获取一次
      * 2.初始化MQClientAPI对象，主要是初始化netty对象
@@ -272,7 +276,7 @@ public class MQClientInstance {
     /**
      * 1.若没有指定Nameserver地址，定时从配置的endopint同步
      * 2.定时同步topic路由信息
-     * 3.定时清除下线的broker；发送心跳
+     * 3.定时清除下线的broker；发送心跳(在一次心跳中将producer列表和consumer列表一次上传)
      * 4.持久化所有的消费者偏移量
      * 5.每1分钟调整线程池大小
      */
@@ -532,6 +536,9 @@ public class MQClientInstance {
         return false;
     }
 
+    /**
+     * 上报所有的producer和consumer数据
+     */
     private void sendHeartbeatToAllBroker() {
         final HeartbeatData heartbeatData = this.prepareHeartbeatData();
         final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
@@ -544,6 +551,7 @@ public class MQClientInstance {
         if (!this.brokerAddrTable.isEmpty()) {
             long times = this.sendHeartbeatTimesTotal.getAndIncrement();
             Iterator<Entry<String, HashMap<Long, String>>> it = this.brokerAddrTable.entrySet().iterator();
+            //向所有的broker发送心跳
             while (it.hasNext()) {
                 Entry<String, HashMap<Long, String>> entry = it.next();
                 String brokerName = entry.getKey();
@@ -641,7 +649,7 @@ public class MQClientInstance {
                         if (changed) {
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
 
-                            for (BrokerData bd : topicRouteData.getBrokerDatas()) {//同步broker地址
+                            for (BrokerData bd : topicRouteData.getBrokerDatas()) {//同步topic所在的broker地址列表
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
 
@@ -710,7 +718,9 @@ public class MQClientInstance {
                 consumerData.setGroupName(impl.groupName());
                 consumerData.setConsumeType(impl.consumeType());
                 consumerData.setMessageModel(impl.messageModel());
+                //消费起始offset
                 consumerData.setConsumeFromWhere(impl.consumeFromWhere());
+                //订阅消息的筛选类型
                 consumerData.getSubscriptionDataSet().addAll(impl.subscriptions());
                 consumerData.setUnitMode(impl.isUnitMode());
 
@@ -723,6 +733,7 @@ public class MQClientInstance {
             MQProducerInner impl = entry.getValue();
             if (impl != null) {
                 ProducerData producerData = new ProducerData();
+                //group
                 producerData.setGroupName(entry.getKey());
 
                 heartbeatData.getProducerDataSet().add(producerData);

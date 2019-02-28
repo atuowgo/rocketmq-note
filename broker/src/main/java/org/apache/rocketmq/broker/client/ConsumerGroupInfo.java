@@ -117,6 +117,10 @@ public class ConsumerGroupInfo {
         return false;
     }
 
+    /**
+     *
+     * 有新客户端上线才认为有变更
+     */
     public boolean updateChannel(final ClientChannelInfo infoNew, ConsumeType consumeType,
         MessageModel messageModel, ConsumeFromWhere consumeFromWhere) {
         boolean updated = false;
@@ -130,7 +134,7 @@ public class ConsumerGroupInfo {
             if (null == prev) {
                 log.info("new consumer connected, group: {} {} {} channel: {}", this.groupName, consumeType,
                     messageModel, infoNew.toString());
-                updated = true;
+                updated = true;//新consumer上线，通知客户端rebalance
             }
 
             infoOld = infoNew;
@@ -155,6 +159,7 @@ public class ConsumerGroupInfo {
 
         for (SubscriptionData sub : subList) {
             SubscriptionData old = this.subscriptionTable.get(sub.getTopic());
+            //订阅模式发生变更
             if (old == null) {
                 SubscriptionData prev = this.subscriptionTable.putIfAbsent(sub.getTopic(), sub);
                 if (null == prev) {

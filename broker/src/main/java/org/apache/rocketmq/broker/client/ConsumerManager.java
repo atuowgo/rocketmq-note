@@ -90,14 +90,14 @@ public class ConsumerManager {
                         this.consumerIdsChangeListener.handle(ConsumerGroupEvent.UNREGISTER, next.getKey());
                     }
                 }
-
+                //连接关闭，通知客户端Consumer列表发生了变化
                 this.consumerIdsChangeListener.handle(ConsumerGroupEvent.CHANGE, next.getKey(), info.getAllChannel());
             }
         }
     }
 
     /**
-     *更新Channel和Subscription
+     * 更新Channel和Subscription
      * 有则比较是否一致，无则新增
      */
     public boolean registerConsumer(final String group, final ClientChannelInfo clientChannelInfo,
@@ -117,6 +117,7 @@ public class ConsumerManager {
         boolean r2 = consumerGroupInfo.updateSubscription(subList);
 
         if (r1 || r2) {
+            //新上线客户端或者topic订阅模式发生变更则通知客户端consumer id列表发生了变更
             if (isNotifyConsumerIdsChangedEnable) {
                 this.consumerIdsChangeListener.handle(ConsumerGroupEvent.CHANGE, group, consumerGroupInfo.getAllChannel());
             }
@@ -141,6 +142,7 @@ public class ConsumerManager {
                 }
             }
             if (isNotifyConsumerIdsChangedEnable) {
+                //客户端去注册，通知客户端Consumer列表发生了变化
                 this.consumerIdsChangeListener.handle(ConsumerGroupEvent.CHANGE, group, consumerGroupInfo.getAllChannel());
             }
         }

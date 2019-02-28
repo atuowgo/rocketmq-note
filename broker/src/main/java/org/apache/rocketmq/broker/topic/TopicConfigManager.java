@@ -54,10 +54,11 @@ public class TopicConfigManager extends ConfigManager {
     public TopicConfigManager() {
     }
 
+    //默认topic配置
     public TopicConfigManager(BrokerController brokerController) {
         this.brokerController = brokerController;
         {
-            // MixAll.SELF_TEST_TOPIC
+            // MixAll.SELF_TEST_TOPIC，自测topic
             String topic = MixAll.SELF_TEST_TOPIC;
             TopicConfig topicConfig = new TopicConfig(topic);
             this.systemTopicList.add(topic);
