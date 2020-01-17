@@ -150,10 +150,10 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     }
 
     /**
-     * 初始化bootstrap连接池
+     * 初始化客户端bootstrap连接池
      * 设置处理链：编码、解码、空闲处理、连接管理(服务端)、请求分发
      * 每3秒清除超时的请求（netty主线程不处理逻辑）
-     * 启动事件处理器（服务端）
+     * 启动客户端的事件处理器，处理IDLE、CLOSE、CONNECT、EXCEPTION事件
      */
     @Override
     public void start() {

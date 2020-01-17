@@ -566,7 +566,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
                 this.copySubscription();//将topic信息复制一份存储在rebalance中
 
-                if (this.defaultMQPushConsumer.getMessageModel() == MessageModel.CLUSTERING) {
+                if (this.defaultMQPushConsumer.getMessageModel() == MessageModel.CLUSTERING) {//Tip:默认为MessageModel.CLUSTERING
                     this.defaultMQPushConsumer.changeInstanceNameToPID();
                 }
 
@@ -601,7 +601,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 }
                 this.offsetStore.load();//
 
-                //根据监听器类型设定消息消费模式，pull模式需要自己指定offset，不需要设定
+                //根据监听器类型设定消息消费模式，pull模式需要自己指定offset，push不需要设定
                 if (this.getMessageListenerInner() instanceof MessageListenerOrderly) {
                     this.consumeOrderly = true;
                     this.consumeMessageService =

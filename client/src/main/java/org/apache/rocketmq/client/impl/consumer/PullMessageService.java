@@ -28,7 +28,10 @@ import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.utils.ThreadUtils;
 
 /**
- * 循环从需要拉取消息的q列表中获取实例，处理完后，再放回队列中
+ * 封装拉模式以实现推模式
+ * 循环从内部的LinkedBlockingQueue<PullRequest>中拿出PullRequest对象(消费q消息封装的对象)，选取一个可用的客户端实例DefaultMQPushConsumerImpl，调用其pullMessage方法
+ * 该方法会判断消费进度，决定是立即消费还是延迟消费，如果是延迟消费则再放回LinkedBlockingQueue中等待消费
+ * 如果是直接消费，则调用PullMessageService(拉模式)的executePullRequestImmediately消费消息
  */
 public class PullMessageService extends ServiceThread {
     private final InternalLogger log = ClientLogger.getLog();

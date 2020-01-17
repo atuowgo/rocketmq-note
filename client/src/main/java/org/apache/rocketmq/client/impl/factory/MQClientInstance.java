@@ -93,7 +93,7 @@ public class MQClientInstance {
     private final ConcurrentMap<String/* group */, MQProducerInner> producerTable = new ConcurrentHashMap<String, MQProducerInner>();
     private final ConcurrentMap<String/* group */, MQConsumerInner> consumerTable = new ConcurrentHashMap<String, MQConsumerInner>();
     private final ConcurrentMap<String/* group */, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<String, MQAdminExtInner>();
-    private final NettyClientConfig nettyClientConfig;
+    private final NettyClientConfig nettyClientConfig;//Tip:Netty客户端的相关配置
     private final MQClientAPIImpl mQClientAPIImpl;
     private final MQAdminImpl mQAdminImpl;
     //topic的路由信息，对应每个topic所在的broker名称、ip以及topic的q信息
@@ -110,11 +110,11 @@ public class MQClientInstance {
             return new Thread(r, "MQClientFactoryScheduledThread");
         }
     });
-    private final ClientRemotingProcessor clientRemotingProcessor;
-    private final PullMessageService pullMessageService;
-    private final RebalanceService rebalanceService;
-    private final DefaultMQProducer defaultMQProducer;
-    private final ConsumerStatsManager consumerStatsManager;
+    private final ClientRemotingProcessor clientRemotingProcessor;//远程命令处理器
+    private final PullMessageService pullMessageService;//消息拉取服务
+    private final RebalanceService rebalanceService;//Rebalance服务
+    private final DefaultMQProducer defaultMQProducer;//Producer服务
+    private final ConsumerStatsManager consumerStatsManager;//消费者消费统计服务
     private final AtomicLong sendHeartbeatTimesTotal = new AtomicLong(0);
     private ServiceState serviceState = ServiceState.CREATE_JUST;
     private DatagramSocket datagramSocket;
@@ -133,7 +133,7 @@ public class MQClientInstance {
         this.clientRemotingProcessor = new ClientRemotingProcessor(this);
         this.mQClientAPIImpl = new MQClientAPIImpl(this.nettyClientConfig, this.clientRemotingProcessor, rpcHook, clientConfig);
 
-        if (this.clientConfig.getNamesrvAddr() != null) {//如果有指定nameserver的地址，则存储,用于后续netty建立连接
+        if (this.clientConfig.getNamesrvAddr() != null) {//如果有指定nameserver的地址，则更新,用于后续netty建立连接
             this.mQClientAPIImpl.updateNameServerAddressList(this.clientConfig.getNamesrvAddr());
             log.info("user specified name server address: {}", this.clientConfig.getNamesrvAddr());
         }
@@ -635,11 +635,11 @@ public class MQClientInstance {
                             }
                         }
                     } else {
-                        topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
+                        topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);//Tip：通过NettyRemotingClient选择一个NameServer获取topic路由信息
                     }
                     if (topicRouteData != null) {
                         TopicRouteData old = this.topicRouteTable.get(topic);
-                        boolean changed = topicRouteDataIsChange(old, topicRouteData);
+                        boolean changed = topicRouteDataIsChange(old, topicRouteData);//Tip:判断topic信息是否发生了更改，主要比较topic所对应的Queue和Broker是否发生了更改
                         if (!changed) {
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {
@@ -662,7 +662,7 @@ public class MQClientInstance {
                                     Entry<String, MQProducerInner> entry = it.next();
                                     MQProducerInner impl = entry.getValue();
                                     if (impl != null) {
-                                        impl.updateTopicPublishInfo(topic, publishInfo);
+                                        impl.updateTopicPublishInfo(topic, publishInfo);//Tip:同步produer关注的topic路由信息
                                     }
                                 }
                             }
@@ -670,18 +670,18 @@ public class MQClientInstance {
                             // Update sub info
                             {
                                 Set<MessageQueue> subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData);
-                                Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
+                                    Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
                                 while (it.hasNext()) {
                                     Entry<String, MQConsumerInner> entry = it.next();
                                     MQConsumerInner impl = entry.getValue();
                                     if (impl != null) {
                                         //更新topic对应的q信息
-                                        impl.updateTopicSubscribeInfo(topic, subscribeInfo);
+                                        impl.updateTopicSubscribeInfo(topic, subscribeInfo);//Tip:同步consumer订阅的topic路由信息
                                     }
                                 }
                             }
                             log.info("topicRouteTable.put. Topic = {}, TopicRouteData[{}]", topic, cloneTopicRouteData);
-                            this.topicRouteTable.put(topic, cloneTopicRouteData);
+                            this.topicRouteTable.put(topic, cloneTopicRouteData);//Tip:更新本地topic信息
                             return true;
                         }
                     } else {
@@ -715,9 +715,9 @@ public class MQClientInstance {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
                 ConsumerData consumerData = new ConsumerData();
-                consumerData.setGroupName(impl.groupName());
-                consumerData.setConsumeType(impl.consumeType());
-                consumerData.setMessageModel(impl.messageModel());
+                consumerData.setGroupName(impl.groupName());//Group
+                consumerData.setConsumeType(impl.consumeType());//消费类型
+                consumerData.setMessageModel(impl.messageModel());//消息模式
                 //消费起始offset
                 consumerData.setConsumeFromWhere(impl.consumeFromWhere());
                 //订阅消息的筛选类型
