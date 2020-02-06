@@ -28,7 +28,7 @@ public class TopicPublishInfo {
     private boolean haveTopicRouterInfo = false;
     //一个topic下分多个q
     private List<MessageQueue> messageQueueList = new ArrayList<MessageQueue>();
-    private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();
+    private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();//用于轮循
     private TopicRouteData topicRouteData;
 
     public boolean isOrderTopic() {
@@ -68,7 +68,7 @@ public class TopicPublishInfo {
     }
 
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
-        if (lastBrokerName == null) {
+        if (lastBrokerName == null) {//Tip:如果最近没有选择过broker，则轮训选择一个topic下的queue
             return selectOneMessageQueue();
         } else {
             int index = this.sendWhichQueue.getAndIncrement();
@@ -85,7 +85,7 @@ public class TopicPublishInfo {
         }
     }
 
-    public MessageQueue selectOneMessageQueue() {
+    public MessageQueue selectOneMessageQueue() {//从topic对应的queue中随机选择一个
         int index = this.sendWhichQueue.getAndIncrement();
         int pos = Math.abs(index) % this.messageQueueList.size();
         if (pos < 0)

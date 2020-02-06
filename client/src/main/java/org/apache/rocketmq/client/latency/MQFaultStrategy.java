@@ -26,7 +26,7 @@ public class MQFaultStrategy {
     private final static InternalLogger log = ClientLogger.getLog();
     //延迟容错对象，维护延迟Brokers的信息
     private final LatencyFaultTolerance<String> latencyFaultTolerance = new LatencyFaultToleranceImpl();
-    //延迟容错开关
+    //故障延迟机制开关
     private boolean sendLatencyFaultEnable = false;
     //延迟级别数组
     private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
@@ -58,21 +58,21 @@ public class MQFaultStrategy {
     }
 
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
-        if (this.sendLatencyFaultEnable) {
+        if (this.sendLatencyFaultEnable) {//如果开启故障延迟机制
             try {
                 //获取一个可用的并且brokerName=lastBrokerName的消息队列
                 int index = tpInfo.getSendWhichQueue().getAndIncrement();
-                for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {//循环找一个
+                for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {//轮训从topic下的queue列表中选择一个
                     int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();
                     if (pos < 0)
                         pos = 0;
                     MessageQueue mq = tpInfo.getMessageQueueList().get(pos);
-                    if (latencyFaultTolerance.isAvailable(mq.getBrokerName())) {//如果可用
-                        if (null == lastBrokerName || mq.getBrokerName().equals(lastBrokerName))
-                            return mq;
+                    if (latencyFaultTolerance.isAvailable(mq.getBrokerName())) {//如果当前broker可用
+                        if (null == lastBrokerName || mq.getBrokerName().equals(lastBrokerName))//最近没有使用过broker或者等于最近使用过来的broker
+                            return mq;//尽快选出一个可用的broker
                     }
                 }
-                //选择一个相对好的broker，不考虑可用性的消息队列
+                //选择一个相对较好，可延迟的broker，这些broker之前都有使用过
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
                 int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
                 if (writeQueueNums > 0) {
@@ -102,12 +102,12 @@ public class MQFaultStrategy {
         }
     }
 
-    private long computeNotAvailableDuration(final long currentLatency) {
+    private long computeNotAvailableDuration(final long currentLatency) {//如果当前延迟超过某个级别，则会设置该broke对应的延迟可用的时间
         for (int i = latencyMax.length - 1; i >= 0; i--) {
             if (currentLatency >= latencyMax[i])
                 return this.notAvailableDuration[i];
         }
 
-        return 0;
+        return 0;//当前延迟小于50ml则不用进行延迟
     }
 }

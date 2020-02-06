@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.rocketmq.client.common.ThreadLocalIndex;
 
 public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> {
+    //Tip:broker故障映射表
     private final ConcurrentHashMap<String, FaultItem> faultItemTable = new ConcurrentHashMap<String, FaultItem>(16);
 
     private final ThreadLocalIndex whichItemWorst = new ThreadLocalIndex();
@@ -53,7 +54,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
     }
 
     /**
-     *如果没有记录过，则该节点为可用节点
+     * 如果没有记录过，则该节点为可用节点
      * 如果有记录过，判断当前时间是否过了最近可用时间
      */
     @Override
@@ -71,7 +72,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
     }
 
     @Override
-    public String pickOneAtLeast() {
+    public String pickOneAtLeast() {//选择一个可延迟的节点
         final Enumeration<FaultItem> elements = this.faultItemTable.elements();
         List<FaultItem> tmpList = new LinkedList<FaultItem>();
         while (elements.hasMoreElements()) {
@@ -106,8 +107,8 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
     class FaultItem implements Comparable<FaultItem> {
         private final String name;//brokername
-        private volatile long currentLatency;//最近延迟时间
-        private volatile long startTimestamp;//开始可用时间
+        private volatile long currentLatency;//最近发生延迟的时间点
+        private volatile long startTimestamp;//下一次开始可用的时间点
 
         public FaultItem(final String name) {
             this.name = name;
@@ -138,7 +139,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
             return 0;
         }
 
-        public boolean isAvailable() {
+        public boolean isAvailable() {//判断当前时间是否已经过了设置的开始可用时间点
             return (System.currentTimeMillis() - startTimestamp) >= 0;
         }
 
