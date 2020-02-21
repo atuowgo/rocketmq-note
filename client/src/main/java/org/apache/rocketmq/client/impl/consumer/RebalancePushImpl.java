@@ -48,7 +48,7 @@ public class RebalancePushImpl extends RebalanceImpl {
     }
 
     /**
-     * 更新客户端订阅topic的版本号（以当前时间时间戳）
+     * 更新客户端订阅topic的版本号（以当前时间时间戳）并通知broker
      * 通知broker
      */
     @Override
@@ -65,7 +65,7 @@ public class RebalancePushImpl extends RebalanceImpl {
         int currentQueueCount = this.processQueueTable.size();
         if (currentQueueCount != 0) {
             int pullThresholdForTopic = this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer().getPullThresholdForTopic();
-            if (pullThresholdForTopic != -1) {
+            if (pullThresholdForTopic != -1) {//如果设置了拉取消息的并发度，则更新并发度
                 int newVal = Math.max(1, pullThresholdForTopic / currentQueueCount);
                 log.info("The pullThresholdForQueue is changed from {} to {}",
                     this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer().getPullThresholdForQueue(), newVal);

@@ -21,7 +21,7 @@ import org.apache.rocketmq.client.log.ClientLogger;
 import org.apache.rocketmq.common.ServiceThread;
 import org.apache.rocketmq.logging.InternalLogger;
 
-public class RebalanceService extends ServiceThread {//默认20s执行一次rebalance
+public class RebalanceService extends ServiceThread {//默认20s执行一次rebalance,被MQClientInstance持有，应用实例相关，一个应用实例只有一个
     private static long waitInterval =
         Long.parseLong(System.getProperty(
             "rocketmq.client.rebalance.waitInterval", "20000"));

@@ -43,16 +43,16 @@ import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
 /**
  * Base class for rebalance algorithm
  */
-public abstract class RebalanceImpl {
+public abstract class RebalanceImpl {//Consumer实例相关，每个Consumer实例都有一个RebalanceImpl
     protected static final InternalLogger log = ClientLogger.getLog();
-    protected final ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = new ConcurrentHashMap<MessageQueue, ProcessQueue>(64);
+    protected final ConcurrentMap</*Queue*/MessageQueue, /*Queue消费进度镜像*/ProcessQueue> processQueueTable = new ConcurrentHashMap<MessageQueue, ProcessQueue>(64);
     protected final ConcurrentMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable =
-        new ConcurrentHashMap<String, Set<MessageQueue>>();
-    protected final ConcurrentMap<String /* topic */, SubscriptionData> subscriptionInner =
-        new ConcurrentHashMap<String, SubscriptionData>();
-    protected String consumerGroup;
-    protected MessageModel messageModel;
-    protected AllocateMessageQueueStrategy allocateMessageQueueStrategy;
+        new ConcurrentHashMap<String, Set<MessageQueue>>();//DefaultMQXxxxConsumerImpl updateTopicSubscribeInfo时添加
+    protected final ConcurrentMap<String /* topic */, /*消息的过滤条件*/SubscriptionData> subscriptionInner =
+        new ConcurrentHashMap<String, SubscriptionData>();//DefaultMQXxxxConsumerImpl subscript时会添加
+    protected String consumerGroup;//Consumer实例所在的ConsumerGroup
+    protected MessageModel messageModel;//消息消费模式
+    protected AllocateMessageQueueStrategy allocateMessageQueueStrategy;//Queue分配策略,默认为AllocateMessageQueueAveragely
     protected MQClientInstance mQClientFactory;
 
     public RebalanceImpl(String consumerGroup, MessageModel messageModel,
@@ -263,7 +263,7 @@ public abstract class RebalanceImpl {
             }
             case CLUSTERING: {//集群模式，每个客户端分到的q列表由AllocateMessageQueueStrategy来分配
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
-                List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);//获取该group,该topic下所有客户端列表
+                List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);//请求broker获取该group,该topic下所有客户端列表
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
                         log.warn("doRebalance, {}, but the topic[{}] not exist.", consumerGroup, topic);
@@ -278,7 +278,7 @@ public abstract class RebalanceImpl {
                     List<MessageQueue> mqAll = new ArrayList<MessageQueue>();
                     mqAll.addAll(mqSet);
 
-                    Collections.sort(mqAll);//对q进行排序,根据topic名，group名，opId
+                    Collections.sort(mqAll);//对queue进行排序,根据topic名，所在broker名，queue名
                     Collections.sort(cidAll);//对客户端id进行排序
 
                     AllocateMessageQueueStrategy strategy = this.allocateMessageQueueStrategy;
@@ -317,7 +317,7 @@ public abstract class RebalanceImpl {
         }
     }
 
-    private void truncateMessageQueueNotMyTopic() {
+    private void truncateMessageQueueNotMyTopic() {//移除Queue中topic不是该实例订阅的对象。
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
 
         for (MessageQueue mq : this.processQueueTable.keySet()) {
@@ -354,6 +354,7 @@ public abstract class RebalanceImpl {
         final boolean isOrder) {
         boolean changed = false;
 
+        //找出rebalance后不属于客户端实例的Queue或者已经过期的Queue,标记为drop，并由子类判断是否是否需要移除，如果需要移除，则该客户端实例所属的Queue便有改变
         Iterator<Entry<MessageQueue, ProcessQueue>> it = this.processQueueTable.entrySet().iterator();
         while (it.hasNext()) {//先遍历现有的集合，判断现有集合是否有不存在新集合里的q
             Entry<MessageQueue, ProcessQueue> next = it.next();
@@ -361,7 +362,7 @@ public abstract class RebalanceImpl {
             ProcessQueue pq = next.getValue();
 
             if (mq.getTopic().equals(topic)) {
-                if (!mqSet.contains(mq)) {//现有的q不在新集合里,将该q的镜像设置为drop，必要时移除现有集合的q实例
+                if (!mqSet.contains(mq)) {//现有的q不在新集合里,将该q的镜像设置为drop，必要时(由子类判断，子类需要异常该Q的offset存储处理)移除现有集合的q实例
                     pq.setDropped(true);//将不再归属的q标记为drop
                     if (this.removeUnnecessaryMessageQueue(mq, pq)) {
                         it.remove();
@@ -369,7 +370,7 @@ public abstract class RebalanceImpl {
                         log.info("doRebalance, {}, remove unnecessary mq, {}", consumerGroup, mq);
                     }
                 } else if (pq.isPullExpired()) {//现有的q在新集合里，判断是否已经过期，没过期不处理
-                    switch (this.consumeType()) {//过期了，pull模型不处理，push模式，将该q的镜像设置为drop
+                    switch (this.consumeType()) {//过期了，pull(主动消费)模型不处理，push(被动消费)模式，将该q的镜像设置为drop
                         case CONSUME_ACTIVELY:
                             break;
                         case CONSUME_PASSIVELY:
@@ -388,6 +389,7 @@ public abstract class RebalanceImpl {
             }
         }
 
+        //判断Rebalance后分配的Queue是否有新增的Queue，如果有
         List<PullRequest> pullRequestList = new ArrayList<PullRequest>();
         for (MessageQueue mq : mqSet) {//遍历新的q集合，判断新的集合是否有不存在现有集合的q，必要时将新增的q加入集合列表
             if (!this.processQueueTable.containsKey(mq)) {
@@ -396,14 +398,14 @@ public abstract class RebalanceImpl {
                     continue;
                 }
 
-                this.removeDirtyOffset(mq);
+                this.removeDirtyOffset(mq);//移除缓存中该Queue的消费偏移量
                 ProcessQueue pq = new ProcessQueue();
-                long nextOffset = this.computePullFromWhere(mq);//计算下一个消费位置的偏移量
+                long nextOffset = this.computePullFromWhere(mq);//计算消费偏移量
                 if (nextOffset >= 0) {
                     ProcessQueue pre = this.processQueueTable.putIfAbsent(mq, pq);
                     if (pre != null) {
                         log.info("doRebalance, {}, mq already exists, {}", consumerGroup, mq);
-                    } else {
+                    } else {//该客户端分配到一个新的Queue,存在待分发请求列表，标记rebalance后Queue有改变
                         log.info("doRebalance, {}, add a new mq, {}", consumerGroup, mq);
                         PullRequest pullRequest = new PullRequest();
                         pullRequest.setConsumerGroup(consumerGroup);
