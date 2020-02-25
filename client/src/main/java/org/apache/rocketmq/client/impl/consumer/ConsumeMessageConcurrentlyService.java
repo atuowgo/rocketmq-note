@@ -207,14 +207,14 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         final MessageQueue messageQueue,
         final boolean dispatchToConsume) {
         final int consumeBatchSize = this.defaultMQPushConsumer.getConsumeMessageBatchMaxSize();
-        if (msgs.size() <= consumeBatchSize) {
+        if (msgs.size() <= consumeBatchSize) {//如果拉回的数据小于设置的没批最大数量(默认为1)，则直接包装为ConsumeRequest提交
             ConsumeRequest consumeRequest = new ConsumeRequest(msgs, processQueue, messageQueue);
             try {
                 this.consumeExecutor.submit(consumeRequest);
             } catch (RejectedExecutionException e) {
                 this.submitConsumeRequestLater(consumeRequest);
             }
-        } else {
+        } else {//否则分为多个批，包装多个ConsumeRequest提交
             for (int total = 0; total < msgs.size(); ) {
                 List<MessageExt> msgThis = new ArrayList<MessageExt>(consumeBatchSize);
                 for (int i = 0; i < consumeBatchSize; i++, total++) {
@@ -264,14 +264,14 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         final ConsumeConcurrentlyContext context,
         final ConsumeRequest consumeRequest
     ) {
-        int ackIndex = context.getAckIndex();
+        int ackIndex = context.getAckIndex();//ackIndex最后一个正常消费的消息索引号，该位置后的消息都是没法正常消费，由用户端控制,可以通过ackIndex来控制需要重发的消息
 
         if (consumeRequest.getMsgs().isEmpty())
             return;
 
         switch (status) {
-            case CONSUME_SUCCESS:
-                if (ackIndex >= consumeRequest.getMsgs().size()) {
+            case CONSUME_SUCCESS://用户端处理成功，统计成功和失败的QPS
+                if (ackIndex >= consumeRequest.getMsgs().size()) {//ackIndex默认值为Integer.MAX_VALUE，如果为该值认为所有消息正常消费，不存在错误
                     ackIndex = consumeRequest.getMsgs().size() - 1;
                 }
                 int ok = ackIndex + 1;
@@ -279,7 +279,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 this.getConsumerStatsManager().incConsumeOKTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), ok);
                 this.getConsumerStatsManager().incConsumeFailedTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), failed);
                 break;
-            case RECONSUME_LATER:
+            case RECONSUME_LATER://用户端处理失败，统计失败的OPS
                 ackIndex = -1;
                 this.getConsumerStatsManager().incConsumeFailedTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(),
                     consumeRequest.getMsgs().size());
@@ -297,18 +297,20 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 break;
             case CLUSTERING://集群模式下，消费失败，会对失败的消息，再次消费
                 List<MessageExt> msgBackFailed = new ArrayList<MessageExt>(consumeRequest.getMsgs().size());
-                for (int i = ackIndex + 1; i < consumeRequest.getMsgs().size(); i++) {//必须将成功的消息放前面，失败的消息放后面?
+                for (int i = ackIndex + 1; i < consumeRequest.getMsgs().size(); i++) {
                     MessageExt msg = consumeRequest.getMsgs().get(i);
+                    //将消费失败的消息发送回broker
                     boolean result = this.sendMessageBack(msg, context);
-                    if (!result) {
+                    if (!result) {//如果发送失败，则直接在用户端重试
                         msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
                         msgBackFailed.add(msg);
                     }
                 }
 
                 if (!msgBackFailed.isEmpty()) {
+                    //将ConsumeRequest中失败的消息列表移除
                     consumeRequest.getMsgs().removeAll(msgBackFailed);
-
+                    //将用户端处理失败且发送回broker失败的队列在用户端重试
                     this.submitConsumeRequestLater(msgBackFailed, consumeRequest.getProcessQueue(), consumeRequest.getMessageQueue());
                 }
                 break;
@@ -316,6 +318,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 break;
         }
 
+        //将处理成功的消息从ProcessQueue中移除，更新缓存
         long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());//获取q逻辑偏移量
         if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(), offset, true);//将q消费的偏移量记录下来，等待后台线程同步到broker或者本地
@@ -463,6 +466,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 .incConsumeRT(ConsumeMessageConcurrentlyService.this.consumerGroup, messageQueue.getTopic(), consumeRT);
 
             if (!processQueue.isDropped()) {
+                //客户端处理完后统一收尾
                 ConsumeMessageConcurrentlyService.this.processConsumeResult(status, context, this);
             } else {
                 log.warn("processQueue is dropped without process consume result. messageQueue={}, msgs={}", messageQueue, msgs);

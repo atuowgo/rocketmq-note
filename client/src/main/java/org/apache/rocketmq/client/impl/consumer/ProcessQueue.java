@@ -44,9 +44,9 @@ public class ProcessQueue {
     private final static long PULL_MAX_IDLE_TIME = Long.parseLong(System.getProperty("rocketmq.client.pull.pullMaxIdleTime", "120000"));
     private final InternalLogger log = ClientLogger.getLog();
     private final ReadWriteLock lockTreeMap = new ReentrantReadWriteLock();
-    private final TreeMap<Long, MessageExt> msgTreeMap = new TreeMap<Long, MessageExt>();
-    private final AtomicLong msgCount = new AtomicLong();
-    private final AtomicLong msgSize = new AtomicLong();
+    private final TreeMap</*消息的起始offset*/Long, MessageExt> msgTreeMap = new TreeMap<Long, MessageExt>();//缓存的待消费消息
+    private final AtomicLong msgCount = new AtomicLong();//缓存的待消费消息数量
+    private final AtomicLong msgSize = new AtomicLong();//缓存的待消费消息大小
     private final Lock lockConsume = new ReentrantLock();
     /**
      * A subset of msgTreeMap, will only be used when orderly consume
@@ -55,8 +55,8 @@ public class ProcessQueue {
     private final AtomicLong tryUnlockTimes = new AtomicLong(0);
     private volatile long queueOffsetMax = 0L;
     private volatile boolean dropped = false;
-    private volatile long lastPullTimestamp = System.currentTimeMillis();
-    private volatile long lastConsumeTimestamp = System.currentTimeMillis();
+    private volatile long lastPullTimestamp = System.currentTimeMillis();//最近执行pull的时间
+    private volatile long lastConsumeTimestamp = System.currentTimeMillis();//最近被客户端消费的时间
     private volatile boolean locked = false;
     private volatile long lastLockTimestamp = System.currentTimeMillis();
     private volatile boolean consuming = false;
@@ -134,7 +134,7 @@ public class ProcessQueue {
                 int validMsgCnt = 0;
                 for (MessageExt msg : msgs) {
                     MessageExt old = msgTreeMap.put(msg.getQueueOffset(), msg);
-                    if (null == old) {
+                    if (null == old) {//非重复消息
                         validMsgCnt++;
                         this.queueOffsetMax = msg.getQueueOffset();
                         msgSize.addAndGet(msg.getBody().length);
@@ -143,7 +143,7 @@ public class ProcessQueue {
                 msgCount.addAndGet(validMsgCnt);
 
                 if (!msgTreeMap.isEmpty() && !this.consuming) {
-                    dispatchToConsume = true;
+                    dispatchToConsume = true;//如果新来的数据不为空且当前客户端没有正在分派消息，则分发给Consumer；对并行化消费无效，作用于顺序消费
                     this.consuming = true;
                 }
 
@@ -167,7 +167,7 @@ public class ProcessQueue {
         return dispatchToConsume;
     }
 
-    public long getMaxSpan() {
+    public long getMaxSpan() {//缓存的数据相差的偏移量
         try {
             this.lockTreeMap.readLock().lockInterruptibly();
             try {

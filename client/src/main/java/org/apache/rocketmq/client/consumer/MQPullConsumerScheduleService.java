@@ -62,7 +62,7 @@ public class MQPullConsumerScheduleService {
             }
         }
 
-        for (MessageQueue mq : mqNewSet) {//将消息包装为Runnable，交给线程池调度
+        for (MessageQueue mq : mqNewSet) {//将MessageQueue包装为Runnable，交给线程池调度
             if (!this.taskTable.containsKey(mq)) {
                 PullTaskImpl command = new PullTaskImpl(mq);
                 this.taskTable.put(mq, command);
