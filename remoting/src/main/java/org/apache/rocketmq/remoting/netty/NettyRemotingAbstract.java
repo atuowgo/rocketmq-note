@@ -169,19 +169,19 @@ public abstract class NettyRemotingAbstract {
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
         final int opaque = cmd.getOpaque();
 
-        if (pair != null) {
+        if (pair != null) {//可处理请求
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
                     try {
                         RPCHook rpcHook = NettyRemotingAbstract.this.getRPCHook();
-                        if (rpcHook != null) {
+                        if (rpcHook != null) {//执行前置处理
                             rpcHook.doBeforeRequest(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
                         }
 
                         //处理请求
-                        final RemotingCommand response = pair.getObject1().processRequest(ctx, cmd);
-                        if (rpcHook != null) {
+                        final RemotingCommand response = pair.getObject1().processRequest(ctx, cmd);//执行处理
+                        if (rpcHook != null) {//执行后置处理
                             rpcHook.doAfterResponse(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd, response);
                         }
 
@@ -387,7 +387,7 @@ public abstract class NettyRemotingAbstract {
 
                     responseTable.remove(opaque);
                     responseFuture.setCause(f.cause());
-                    responseFuture.putResponse(null);//通知waitResponse有结果
+                    responseFuture.putResponse(null);//请求失败，无需再等待，直接通知waitResponse有结果
                     log.warn("send a request command to channel <" + addr + "> failed.");
                 }
             });

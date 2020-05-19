@@ -30,6 +30,7 @@ public class DispatchRequest {
     private final long consumeQueueOffset;
     private final String keys;
     private final boolean success;
+    //MessageId
     private final String uniqKey;
 
     private final int sysFlag;

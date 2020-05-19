@@ -42,7 +42,9 @@ import org.apache.rocketmq.store.util.LibC;
 import sun.nio.ch.DirectBuffer;
 
 /**
- * 对应一个文件的mmap映射
+ * 同时使用mmap和filechannel操作文件(对应mmap和sendfile)
+ * 如果不使用堆外缓冲区则只使用sendfile
+ * 同时使用时，mmap用于读，sendfile用于写
  * 如果开启了堆外内存，先将输入写到堆外内存，再刷新到mmap
  * 需要指定文件大小
  */
@@ -53,16 +55,16 @@ public class MappedFile extends ReferenceResource {
     private static final AtomicLong TOTAL_MAPPED_VIRTUAL_MEMORY = new AtomicLong(0);//总的虚拟内存大小
 
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);//总的映射文件数
-    protected final AtomicInteger wrotePosition = new AtomicInteger(0);//写的位置
+    protected final AtomicInteger wrotePosition = new AtomicInteger(0);//当前mmap文件的写位置
     //ADD BY ChenYang
-    protected final AtomicInteger committedPosition = new AtomicInteger(0);//提交位置
-    private final AtomicInteger flushedPosition = new AtomicInteger(0);//已刷盘数据的位置
-    protected int fileSize;
+    protected final AtomicInteger committedPosition = new AtomicInteger(0);//当前mmap文件的提交位置
+    private final AtomicInteger flushedPosition = new AtomicInteger(0);//当前mmap文件已刷盘的位置
+    protected int fileSize;//文件大小
     protected FileChannel fileChannel;
     /**
      * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
      */
-    protected ByteBuffer writeBuffer = null; //堆外写缓冲
+    protected ByteBuffer writeBuffer = null; //堆外写缓冲区
     protected TransientStorePool transientStorePool = null;
     private String fileName;
     private long fileFromOffset;//文件存储的消息起始偏移量，值为文件名
@@ -166,7 +168,7 @@ public class MappedFile extends ReferenceResource {
 
         try {
             this.fileChannel = new RandomAccessFile(this.file, "rw").getChannel();
-            this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
+                this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
             TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);
             TOTAL_MAPPED_FILES.incrementAndGet();
             ok = true;
@@ -213,7 +215,7 @@ public class MappedFile extends ReferenceResource {
         int currentPos = this.wrotePosition.get();
 
         if (currentPos < this.fileSize) {//文件还没写满
-            ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
+            ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();//如果有缓冲区，则使用缓冲区，否则直接使用mmap映射的内存
             byteBuffer.position(currentPos);//byteBuffer,指向剩余可写的部分
             AppendMessageResult result = null;
             if (messageExt instanceof MessageExtBrokerInner) {
@@ -281,7 +283,7 @@ public class MappedFile extends ReferenceResource {
     /**
      * @return The current flushed position
      */
-    public int flush(final int flushLeastPages) {
+    public int flush(final int flushLeastPages) {//强制刷盘
         if (this.isAbleToFlush(flushLeastPages)) {
             if (this.hold()) {
                 int value = getReadPosition();
@@ -315,9 +317,9 @@ public class MappedFile extends ReferenceResource {
             //no need to commit data to file channel, so just regard wrotePosition as committedPosition.
             return this.wrotePosition.get();
         }
-        if (this.isAbleToCommit(commitLeastPages)) {
+        if (this.isAbleToCommit(commitLeastPages)) {//1:写入位置等于文件大小；2.指定页数时，是否有大于指定值的页数没提交；3.写入位置是否大于刷盘的位置
             if (this.hold()) {
-                commit0(commitLeastPages);
+                commit0(commitLeastPages);//将缓冲区的数据写入fileChannel，不强制刷盘，等待操作系统刷盘
                 this.release();
             } else {
                 log.warn("in commit, hold failed, commit offset = " + this.committedPosition.get());
@@ -326,8 +328,8 @@ public class MappedFile extends ReferenceResource {
 
         // All dirty data has been committed to FileChannel.
         if (writeBuffer != null && this.transientStorePool != null && this.fileSize == this.committedPosition.get()) {
-            this.transientStorePool.returnBuffer(writeBuffer);
-            this.writeBuffer = null;
+            this.transientStorePool.returnBuffer(writeBuffer);//归还缓冲区
+            this.writeBuffer = null;//置为空，后续直接写fileChannel
         }
 
         return this.committedPosition.get();

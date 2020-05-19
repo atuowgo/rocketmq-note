@@ -206,13 +206,13 @@ public class MappedFileQueue {
 
     public MappedFile getLastMappedFile(final long startOffset, boolean needCreate) {
         long createOffset = -1;
-        MappedFile mappedFileLast = getLastMappedFile();
+        MappedFile mappedFileLast = getLastMappedFile();//物理上最后一个MappedFile
 
-        if (mappedFileLast == null) {
+        if (mappedFileLast == null) {//队列为空
             createOffset = startOffset - (startOffset % this.mappedFileSize);
         }
 
-        if (mappedFileLast != null && mappedFileLast.isFull()) {
+        if (mappedFileLast != null && mappedFileLast.isFull()) {//最后一个文件满了
             createOffset = mappedFileLast.getFileFromOffset() + this.mappedFileSize;
         }
 
@@ -222,10 +222,10 @@ public class MappedFileQueue {
                 + UtilAll.offset2FileName(createOffset + this.mappedFileSize);
             MappedFile mappedFile = null;
 
-            if (this.allocateMappedFileService != null) {
+            if (this.allocateMappedFileService != null) {//预分配两个文件
                 mappedFile = this.allocateMappedFileService.putRequestAndReturnMappedFile(nextFilePath,
                     nextNextFilePath, this.mappedFileSize);
-            } else {
+            } else {//直接创建一个,只使用mmap读写
                 try {
                     mappedFile = new MappedFile(nextFilePath, this.mappedFileSize);
                 } catch (IOException e) {

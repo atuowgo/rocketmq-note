@@ -146,15 +146,15 @@ public class RemotingCommand {
 
     public static RemotingCommand decode(final ByteBuffer byteBuffer) {
         int length = byteBuffer.limit();
-        int oriHeaderLen = byteBuffer.getInt();
-        int headerLength = getHeaderLength(oriHeaderLen);
+        int oriHeaderLen = byteBuffer.getInt();//前4个字节表示Header长度
+        int headerLength = getHeaderLength(oriHeaderLen);//根据前4个字节计算得到Header的数据长度
 
         byte[] headerData = new byte[headerLength];
         byteBuffer.get(headerData);
 
         RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));
 
-        int bodyLength = length - 4 - headerLength;
+        int bodyLength = length - 4 - headerLength;//获得Body的长度
         byte[] bodyData = null;
         if (bodyLength > 0) {
             bodyData = new byte[bodyLength];

@@ -456,7 +456,7 @@ public class DefaultMessageStore implements MessageStore {
      * 查找到消息内容后再根据filter判断是否需要返回
      * 返回结果为从给定偏移量开始的可读取内容列表
      */
-    public GetMessageResult getMessage(final String group, final String topic, final int queueId, final long offset,
+    public GetMessageResult getMessage(final String group, final String topic, final int queueId,/*逻辑偏移量*/ final long offset,
         final int maxMsgNums,
         final MessageFilter messageFilter) {
         if (this.shutdown) {
@@ -1821,21 +1821,21 @@ public class DefaultMessageStore implements MessageStore {
                 }
 
                 //根据偏移量从CommitLog中重新读取消息内容块
-                SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
+                SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);//从commitLog中找到offset开始到当前可读的最大内容，并返回
                 if (result != null) {
                     try {
-                        this.reputFromOffset = result.getStartOffset();
+                        this.reputFromOffset = result.getStartOffset();//物理offset
 
                         for (int readSize = 0; readSize < result.getSize() && doNext; ) {
                             //解析为DispatchRequest
                             DispatchRequest dispatchRequest =
-                                DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false);
+                                DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false);//从内容中解析出一条Message的存储内容，除去body部分
                             int size = dispatchRequest.getMsgSize();
 
                             if (dispatchRequest.isSuccess()) {
                                 if (size > 0) {
                                     //执行分发
-                                    DefaultMessageStore.this.doDispatch(dispatchRequest);
+                                    DefaultMessageStore.this.doDispatch(dispatchRequest);//分发单条消息
 
                                     //如果是master节点且允许长连接拉取消息，则通知消息PullRequestHoldService消息到达
                                     if (BrokerRole.SLAVE != DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole()
@@ -1846,7 +1846,7 @@ public class DefaultMessageStore implements MessageStore {
                                             dispatchRequest.getBitMap(), dispatchRequest.getPropertiesMap());
                                     }
 
-                                    this.reputFromOffset += size;
+                                    this.reputFromOffset += size;//计算下条消息的物理offset
                                     readSize += size;
                                     if (DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole() == BrokerRole.SLAVE) {
                                         DefaultMessageStore.this.storeStatsService

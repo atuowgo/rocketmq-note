@@ -123,7 +123,7 @@ public class RouteInfoManager {
 
                 boolean registerFirst = false;
 
-                //更新brokerName对应的客户端地址列表
+                //更新brokerName对应的broker地址列表
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                 if (null == brokerData) {
                     registerFirst = true;
@@ -139,7 +139,7 @@ public class RouteInfoManager {
                         || registerFirst) {//如果是第一次注册或者broker的配置发生了改变
                         ConcurrentMap<String, TopicConfig> tcTable =
                             topicConfigWrapper.getTopicConfigTable();
-                        if (tcTable != null) {
+                        if (tcTable != null) {//如果有新配置
                             for (Map.Entry<String, TopicConfig> entry : tcTable.entrySet()) {
                                 this.createAndUpdateQueueData(brokerName, entry.getValue());
                             }
@@ -166,8 +166,8 @@ public class RouteInfoManager {
                 }
 
                 if (MixAll.MASTER_ID != brokerId) {
-                    String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
-                    if (masterAddr != null) {
+                    String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);//如果不是master节点，则找到master节点
+                    if (masterAddr != null) {//更新存活信息的ha地址和master地址
                         BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.get(masterAddr);
                         if (brokerLiveInfo != null) {
                             result.setHaServerAddr(brokerLiveInfo.getHaServerAddr());
@@ -185,7 +185,7 @@ public class RouteInfoManager {
         return result;
     }
 
-    public boolean isBrokerTopicConfigChanged(final String brokerAddr, final DataVersion dataVersion) {
+    public boolean isBrokerTopicConfigChanged(final String brokerAddr, final DataVersion dataVersion) {//之前没注册过或者已有的版本号同当前的不一致，则表示broker的topic配置发生了改变
         DataVersion prev = queryBrokerTopicConfig(brokerAddr);
         return null == prev || !prev.equals(dataVersion);
     }
@@ -219,7 +219,7 @@ public class RouteInfoManager {
             queueDataList.add(queueData);
             this.topicQueueTable.put(topicConfig.getTopicName(), queueDataList);
             log.info("new topic registered, {} {}", topicConfig.getTopicName(), queueData);
-        } else {
+        } else {//如果topic对应的Queue列表中存在同当前一样的配置，则不更新，否则更换为当前配置
             boolean addNewOne = true;
 
             Iterator<QueueData> it = queueDataList.iterator();

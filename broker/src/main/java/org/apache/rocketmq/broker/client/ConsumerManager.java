@@ -113,8 +113,8 @@ public class ConsumerManager {
 
         boolean r1 =
             consumerGroupInfo.updateChannel(clientChannelInfo, consumeType, messageModel,
-                consumeFromWhere);
-        boolean r2 = consumerGroupInfo.updateSubscription(subList);
+                consumeFromWhere);//是否有新客户端连接
+        boolean r2 = consumerGroupInfo.updateSubscription(subList);//订阅的topic是否发生了改变
 
         if (r1 || r2) {
             //新上线客户端或者topic订阅模式发生变更则通知客户端consumer id列表发生了变更
